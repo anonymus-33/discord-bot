@@ -9,7 +9,15 @@ import aiohttp
 from aiohttp import web
 import asyncio
 from discord.ext import tasks
+import base64
 
+if not os.path.exists("cred.json"):
+    cred_base64 = os.environ.get("GOOGLE_CRED_BASE64")
+    with open("cred.json", "wb") as f:
+        f.write(base64.b64decode(cred_base64))
+
+# Luego sigue con la carga normal:
+creds = ServiceAccountCredentials.from_json_keyfile_name("cred.json", scope)
 
 # ------------ CONFIGURACION ------------
 CANAL_CONTROL_ID = 1389679233214845030
