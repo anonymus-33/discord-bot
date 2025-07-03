@@ -127,6 +127,7 @@ datos_temp = {}
 @bot.event
 async def on_ready():
     print(f"Bot conectado como {bot.user}")
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="el control de los partners de TC 🐢"))
 
 @bot.event
 async def on_message(message):
@@ -196,9 +197,10 @@ async def start_webserver():
 
 @tasks.loop(minutes=5)
 async def self_ping():
+    url = "https://discord-bot-partners-tc.onrender.com/"
     try:
         async with aiohttp.ClientSession() as session:
-            await session.get("http://localhost:8080/")
+            await session.get(url)
     except Exception as e:
         print(f"Error en self-ping: {e}")
 
