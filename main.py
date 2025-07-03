@@ -9,16 +9,21 @@ import aiohttp
 from aiohttp import web
 import asyncio
 from discord.ext import tasks
-import os
 import base64
+import binascii
 
 cred_base64 = os.getenv("GOOGLE_SHEETS_CREDENTIALS")
 
-if cred_base64 is None:
-    raise Exception("La variable de entorno GOOGLE_SHEETS_CREDENTIALS no está configurada.")
+if not cred_base64:
+    raise ValueError("La variable de entorno GOOGLE_SHEETS_CREDENTIALS no está configurada.")
+
+try:
+    decoded_bytes = base64.b64decode(cred_base64)
+except binascii.Error as e:
+    raise ValueError(f"Error al decodificar GOOGLE_SHEETS_CREDENTIALS: {e}")
 
 with open("cred.json", "wb") as f:
-    f.write(base64.b64decode(cred_base64))
+    f.write(decoded_bytes)
 
 # ------------ CONFIGURACION ------------
 CANAL_CONTROL_ID = 1389679233214845030
