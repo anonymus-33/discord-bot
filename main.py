@@ -56,7 +56,15 @@ def buscar_fila(partner):
     return None
 
 def actualizar_o_crear_fila(datos):
-    fila_existente = buscar_fila(datos["partner"])
+    registros = sheet.get_all_records()
+    fila_existente = None
+    fecha_hoy = datetime.utcnow().strftime("%Y-%m-%d")
+
+    # Buscar fila con el mismo partner y última renovación igual a hoy
+    for i, row in enumerate(registros, start=2):
+        if row.get("Persona") == datos["partner"] and row.get("Última renovación") == fecha_hoy:
+            fila_existente = i
+            break
 
     # Determinar estado
     if all(datos[key] == "Sí" for key in ["plantilla", "everyone", "timestamp", "mencion"]):
@@ -66,7 +74,7 @@ def actualizar_o_crear_fila(datos):
 
     fila_data = [
         datos["partner"],      # Persona (col A)
-        datos["ultima"],       # Última renovación (col B)
+        fecha_hoy,             # Última renovación (col B), actualizamos a hoy
         datos["proxima"],      # Próxima renovación (col C)
         estado,                # Estado de renovación (col D)
         datos["plantilla"],    # Ha Enviado Plantilla (col E)
@@ -77,7 +85,6 @@ def actualizar_o_crear_fila(datos):
 
     if fila_existente:
         sheet.update(f"A{fila_existente}:H{fila_existente}", [fila_data])
-        # Aplicar formato SOLO en la columna D
         if estado == "RENOVADO":
             sheet.format(f"D{fila_existente}", {
                 "backgroundColor": {"red": 0, "green": 1, "blue": 0},
@@ -88,7 +95,6 @@ def actualizar_o_crear_fila(datos):
                 "backgroundColor": {"red": 1, "green": 1, "blue": 1},
                 "textFormat": {"bold": False}
             })
-        # Limpiar formato en la columna E (Ha enviado plantilla)
         sheet.format(f"E{fila_existente}", {
             "textFormat": {"bold": False}
         })
@@ -208,3 +214,4 @@ async def main():
 asyncio.run(main())
 
 bot.run(os.getenv("DISCORD_BOT_TOKEN"))
+
