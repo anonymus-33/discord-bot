@@ -196,6 +196,8 @@ async def self_ping():
     except Exception as e:
         print(f"Error en self-ping: {e}")
 
+print("DISCORD_BOT_TOKEN:", os.getenv("DISCORD_BOT_TOKEN"))
+
 # ------------------ ARRANQUE BOT + WEB ------------------
 
 async def main():
