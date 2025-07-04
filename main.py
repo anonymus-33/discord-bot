@@ -31,7 +31,8 @@ CANAL_CONTROL_ID = 1368713365836398662  # Canal control partners
 GOOGLE_SHEET_NAME = "Control rendimiento TC"
 CRED_FILE = "cred.json"
 
-PARTNERS_CHANNELS = {
+# Mapeo canal_id -> partner (nombre hoja)
+partner_por_canal = {
     1354816506298503468: "astra-community",
     1259150196911116340: "maes-house",
     1248387513685639178: "cats-world",
@@ -58,7 +59,8 @@ PARTNERS_CHANNELS = {
     1369113967095582820: "banananef-team",
     1371529312406339705: "luniverzone",
     1378790397148401774: "el-nido-de-cuervo",
-    1385812628282282014: "empanada-chat"
+    1385812628282282014: "empanada-chat",
+    1368713365836398662: "canal-control-partners"  # Canal control partners
 }
 
 # ------------ GOOGLE SHEETS SETUP ------------
@@ -77,36 +79,16 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # ------------ FUNCIONES AUXILIARES ------------
 
-def buscar_fila(partner, sheet):
+def buscar_fila_por_autor(sheet, autor):
     registros = sheet.get_all_records()
     for i, row in enumerate(registros, start=2):
-        if row.get("Persona") == partner:
+        if row.get("Persona") == autor:
             return i
     return None
 
-def actualizar_o_crear_fila(datos):
-    # Abrimos hoja según partner guardado en datos["partner"]
-    partner = datos["partner"]
-    hoja_nombre = None
-    # Buscar el canal que tenga este partner
-    for canal_id, nombre in PARTNERS_CHANNELS.items():
-        if nombre == partner:
-            hoja_nombre = nombre
-            break
-    if not hoja_nombre:
-        hoja_nombre = "blox-fruits"  # fallback
-
-    sheet = client_gs.open(GOOGLE_SHEET_NAME).worksheet(hoja_nombre)
-
-    registros = sheet.get_all_records()
-    fila_existente = None
+def actualizar_o_crear_fila(sheet, datos):
+    fila_existente = buscar_fila_por_autor(sheet, datos["autor"])
     fecha_hoy = datetime.utcnow().strftime("%Y-%m-%d")
-
-    # Buscar fila con el mismo partner y última renovación igual a hoy
-    for i, row in enumerate(registros, start=2):
-        if row.get("Persona") == partner and row.get("Última renovación") == fecha_hoy:
-            fila_existente = i
-            break
 
     # Determinar estado
     if all(datos[key] == "Sí" for key in ["plantilla", "everyone", "timestamp", "mencion"]):
@@ -115,14 +97,14 @@ def actualizar_o_crear_fila(datos):
         estado = "PENDIENTE"
 
     fila_data = [
-        partner,              # Persona (col A)
-        fecha_hoy,            # Última renovación (col B)
-        datos["proxima"],     # Próxima renovación (col C)
-        estado,               # Estado de renovación (col D)
-        datos["plantilla"],   # Ha Enviado Plantilla (col E)
-        datos["everyone"],    # Ping @everyone (col F)
-        datos["timestamp"],   # Timestamp correcto (col G)
-        datos["mencion"]      # Me ha mencionado (col H)
+        datos["autor"],      # Persona (col A)
+        fecha_hoy,           # Última renovación (col B)
+        datos["proxima"],    # Próxima renovación (col C)
+        estado,              # Estado de renovación (col D)
+        datos["plantilla"],  # Ha Enviado Plantilla (col E)
+        datos["everyone"],   # Ping @everyone (col F)
+        datos["timestamp"],  # Timestamp correcto (col G)
+        datos["mencion"]     # Me ha mencionado (col H)
     ]
 
     if fila_existente:
@@ -164,6 +146,7 @@ def es_plantilla(mensaje):
     return re.search(patron, mensaje) is not None
 
 # ------------ EVENTOS DEL BOT ------------
+
 datos_temp = {}
 
 @bot.event
@@ -182,37 +165,45 @@ async def on_message(message):
     fecha_hoy = datetime.utcnow().strftime("%Y-%m-%d")
 
     if canal_id == CANAL_CONTROL_ID:
+        # Control partners: detectar menciones a canales
         match = re.search(r"<@(\d+)>\s*<#(\d+)>", contenido)
         if match:
             mencion_id, ref_canal_id = match.groups()
             ref_canal_id = int(ref_canal_id)
-            if ref_canal_id in datos_temp:
+            partner = partner_por_canal.get(ref_canal_id)
+            if partner:
+                sheet = client_gs.open(GOOGLE_SHEET_NAME).worksheet(partner)
+                if ref_canal_id not in datos_temp:
+                    datos_temp[ref_canal_id] = {
+                        "autor": autor,
+                        "proxima": "",
+                        "plantilla": "No",
+                        "everyone": "No",
+                        "timestamp": "No",
+                        "mencion": "No"
+                    }
                 datos_temp[ref_canal_id]["mencion"] = "Sí"
-                actualizar_o_crear_fila(datos_temp[ref_canal_id])
+                actualizar_o_crear_fila(sheet, datos_temp[ref_canal_id])
 
     else:
-        if canal_id not in PARTNERS_CHANNELS:
-            # Ignorar si canal no está en la lista de partners
-            return
-
-        hoja_nombre = PARTNERS_CHANNELS[canal_id]
-        sheet = client_gs.open(GOOGLE_SHEET_NAME).worksheet(hoja_nombre)
+        partner = partner_por_canal.get(canal_id)
+        if not partner:
+            return  # Canal no controlado
 
         if canal_id not in datos_temp:
             datos_temp[canal_id] = {
-                "partner": autor,
-                "ultima": "",
+                "autor": autor,
                 "proxima": "",
-                "estado": "Pendiente",
                 "plantilla": "No",
                 "everyone": "No",
                 "timestamp": "No",
                 "mencion": "No"
             }
 
+        sheet = client_gs.open(GOOGLE_SHEET_NAME).worksheet(partner)
+
         if es_plantilla(contenido):
             datos_temp[canal_id]["plantilla"] = "Sí"
-            datos_temp[canal_id]["ultima"] = fecha_hoy
 
         if "@everyone" in contenido or any(str(role) == "@everyone" for role in message.role_mentions):
             datos_temp[canal_id]["everyone"] = "Sí"
@@ -223,7 +214,7 @@ async def on_message(message):
                 datos_temp[canal_id]["timestamp"] = "Sí"
                 datos_temp[canal_id]["proxima"] = fecha_ts
 
-        actualizar_o_crear_fila(datos_temp[canal_id])
+        actualizar_o_crear_fila(sheet, datos_temp[canal_id])
 
     await bot.process_commands(message)
 
